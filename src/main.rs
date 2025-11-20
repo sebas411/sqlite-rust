@@ -2,7 +2,7 @@ use anyhow::{Ok, Result, anyhow, bail};
 use std::fs::File;
 use std::io::prelude::*;
 
-use crate::modules::{ast::{Expr, SelectItem}, sql_parser::sql_parser, table::{Column, Table}};
+use crate::modules::{ast::{Expr, Literal, SelectItem}, sql_parser::sql_parser, table::{Column, Table}};
 mod modules;
 
 fn get_column_size(ctype: i64) -> usize {
@@ -141,10 +141,11 @@ fn main() -> Result<()> {
                         println!("{}", cell_num);
                         return Ok(());
                     },
-                    SelectItem::Expr(item) => {
-                        let Expr::Ident(item) = item;
-                        let cnum = available_columns.iter().position(|c| &c.name == item).ok_or(anyhow!("Column not on table"))?;
-                        print_columns.push(cnum);
+                    SelectItem::Literal(item) => {
+                        if let Literal::Ident(item) = item {
+                            let cnum = available_columns.iter().position(|c| &c.name == item).ok_or(anyhow!("Column not on table"))?;
+                            print_columns.push(cnum);
+                        }
                     },
                     SelectItem::Star => {
                         for i in 0..available_columns.len() {
@@ -185,6 +186,17 @@ fn main() -> Result<()> {
                     current_offset += size;
                     let content = String::from_utf8(content_bytes)?;
                     cols.push(content);
+                }
+
+                // check where clause
+                if let Some(expr) = select_stmt.where_expr.clone() {
+                    if let Expr::Equality { column: Literal::Ident(column), condition: Literal::StringLiteral(condition) } = expr {
+                        let cnum = available_columns.iter().position(|c| c.name == column).ok_or(anyhow!("Column not on table"))?;
+                        let cvalue = &cols[cnum];
+                        if cvalue != &condition {
+                            continue;
+                        }
+                    }
                 }
                 
                 // print row

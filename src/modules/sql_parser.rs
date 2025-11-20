@@ -1,4 +1,4 @@
-use crate::modules::ast::{Expr, SelectItem, SelectStatement};
+use crate::modules::ast::{Expr, Literal, SelectItem, SelectStatement};
 
 peg::parser! {
     pub grammar sql_parser() for str {
@@ -8,12 +8,16 @@ peg::parser! {
 
         // ---- SELECT ----
         rule select_stmt() -> SelectStatement
-            = kw_select() _ cols:select_list() _ kw_from() _ table:ident() {
+            = kw_select() _ cols:select_list() _ kw_from() _ table:ident() _ where_clause:where_clause()? {
                 SelectStatement {
                     columns: cols,
                     table,
+                    where_expr: where_clause
                 }
             }
+
+        rule where_clause() -> Expr
+            = kw_where() _ e:expr() {e}
 
         rule select_list() -> Vec<SelectItem>
             = "*" { vec![SelectItem::Star] }
@@ -28,11 +32,17 @@ peg::parser! {
             }
 
         rule select_item() -> SelectItem
-            = e:expr() { SelectItem::Expr(e) }
+            = l:literal() { SelectItem::Literal(l) }
 
-        // ---- Expressions (very minimal for now) ----
+        // ---- Expressions ----
         rule expr() -> Expr
-            = id:ident() { Expr::Ident(id) }
+            = col:literal() _ "=" _ con:literal() { Expr::Equality { column: col, condition: con } }
+            / l:literal() { Expr::Literal(l) }
+
+        rule literal() -> Literal
+            = id:ident() { Literal::Ident(id) }
+            / s:string_literal() { Literal::StringLiteral(s) }
+            / n:number_literal() { Literal::NumberLiteral(n) }
 
         // ---- Identifiers and keywords ----
 
@@ -44,6 +54,14 @@ peg::parser! {
                 id.to_string()
             }
             / expected!("identifier")
+
+        // Strings (surrounded by single quotes)
+        rule string_literal() -> String
+            = "'" s:$([^ '\'']*) "'" { s.to_string() }
+
+        // Numbers
+        rule number_literal() -> f64
+            = n:$(['0'..='9']+ ("." ['0'..='9']+)? ) { n.parse().unwrap() }
 
         /// Case-insensitive SELECT
         rule kw_select()
@@ -65,6 +83,12 @@ peg::parser! {
                 "COUNT" / "count" / "Count"
             }
             / expected!("COUNT")
+
+        rule kw_where()
+            = quiet!{
+                "WHERE" / "where" / "Where"
+            }
+            / expected!("WHERE")
 
         // ---- Whitespace & comments ----
         rule _()
