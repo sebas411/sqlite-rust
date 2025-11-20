@@ -146,14 +146,18 @@ fn main() -> Result<()> {
                         let cnum = available_columns.iter().position(|c| &c.name == item).ok_or(anyhow!("Column not on table"))?;
                         print_columns.push(cnum);
                     },
-                    SelectItem::Star => ()
+                    SelectItem::Star => {
+                        for i in 0..available_columns.len() {
+                            print_columns.push(i);
+                        }
+                    }
                 }
             }
 
             // read each cell
             for i in 0..cell_num as usize {
                 let mut current_offset = u16::from_be_bytes([buffer[8+2*i], buffer[8+2*i+1]]) as usize;
-                let _record_size = get_varint(&buffer, &mut current_offset); // size of record
+                get_varint(&buffer, &mut current_offset); // size of record
                 get_varint(&buffer, &mut current_offset); // the rowid
 
                 // read cell header
@@ -167,17 +171,31 @@ fn main() -> Result<()> {
                 if record_header_start + record_header_size as usize != current_offset {
                     bail!("Did not get to the end of record header! Expected: {}, current: {}", record_header_start + record_header_size as usize, current_offset)
                 }
-
+                
+                let mut cols = vec![];
+                
                 // read record content (loop for each column)
                 for j in 0..available_columns.len() {
+                    if available_columns[j].name == "id" {
+                        cols.push(format!("{}", i+1));
+                        continue;
+                    }
                     let size = get_column_size(column_sizes[j]);
                     let content_bytes = buffer[current_offset..current_offset+size].to_vec();
                     current_offset += size;
-                    if print_columns.contains(&j) {
-                        let content = String::from_utf8(content_bytes)?;
-                        println!("{}", content);
-                    }
+                    let content = String::from_utf8(content_bytes)?;
+                    cols.push(content);
                 }
+                
+                // print row
+                for (j, col_index) in print_columns.iter().enumerate() {
+                    if j > 0 {
+                        print!("|");
+                    }
+                    print!("{}", cols[*col_index]);
+                }
+
+                println!();
             }
         },
     }
