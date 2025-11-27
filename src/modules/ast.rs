@@ -1,4 +1,5 @@
 use std::fmt;
+use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -9,12 +10,30 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Expr {
+    pub fn get_equality(&self) -> Result<(Literal, Literal)> {
+        if let Self::Equality { column, condition } = self {
+            return Ok((column.clone(), condition.clone()))
+        }
+        Err(anyhow!("Expr isnt an equality."))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Literal {
     Ident(String),
     StringLiteral(String),
     NumberLiteral(f64),
     Null
+}
+
+impl Literal {
+    pub fn get_ident(&self) -> Result<String> {
+        if let Self::Ident(s) = self {
+            return Ok(s.clone())
+        }
+        Err(anyhow!("Literal isnt an ident"))
+    }
 }
 
 impl fmt::Display for Literal {

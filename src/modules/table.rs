@@ -1,12 +1,12 @@
 
 pub struct Table {
     pub name: String,
-    pub rootpage: u8,
+    pub rootpage: u32,
     pub columns: Vec<Column>
 }
 
 impl Table {
-    pub fn new(name: &str, rootpage: u8, columns: Vec<Column>) -> Self {
+    pub fn new(name: &str, rootpage: u32, columns: Vec<Column>) -> Self {
         Self { name: name.into(), rootpage, columns }
     }
 }

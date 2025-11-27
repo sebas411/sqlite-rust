@@ -2,7 +2,7 @@ use anyhow::{Ok, Result, anyhow, bail};
 use std::fs::File;
 use std::io::prelude::*;
 
-use crate::modules::{ast::{Literal, SelectItem}, helpers::{get_table_info, read_cell}, sql_parser::sql_parser};
+use crate::modules::{ast::{Expr, Literal, SelectItem}, helpers::{get_table_info, read_index, read_page}, sql_parser::sql_parser};
 mod modules;
 
 fn main() -> Result<()> {
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     let table_num = u16::from_be_bytes([buffer[100+3], buffer[100+4]]);
 
-    let tables = get_table_info(&buffer);
+    let (tables, indices) = get_table_info(&buffer);
 
     // Parse command and act accordingly
     let command = &args[2];
@@ -80,7 +80,24 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            read_cell(&file, my_table.rootpage as u32, page_size as usize, &select_stmt.where_expr, &available_columns, &print_columns)?
+            let mut searched_index = false;
+            if let Some(Expr::Equality { column: Literal::Ident(column), condition: _}) = &select_stmt.where_expr {
+                let mut my_index = None;
+                for index in indices {
+                    if index.name == my_table.name && index.columns.iter().any(|c| &c.name == column) {
+                        my_index = Some(index);
+                        break;
+                    }
+                }
+                if let Some(my_index) = my_index {
+                    searched_index = true;
+                    let where_expr = select_stmt.where_expr.clone().unwrap();
+                    read_index(&file, my_index.rootpage, page_size as usize, &where_expr, &available_columns, &print_columns, &my_index.columns, my_table.rootpage)?;
+                }
+            }
+            if !searched_index {
+                read_page(&file, my_table.rootpage, page_size as usize, &select_stmt.where_expr, &available_columns, &print_columns, None)?
+            }
         },
     }
 
